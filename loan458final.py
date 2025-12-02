@@ -8,7 +8,7 @@ import sklearn # This is needed for the pickle file to load!
 
 # Load the trained model
 # IMPORTANT: Update this path and file name if you saved it differently
-with open("/content/drive/MyDrive/BUS 458/458final.pkl", "rb") as file:
+with open("458final.pkl", "rb") as file:
     model = pickle.load(file)
 
 # Title for the app
