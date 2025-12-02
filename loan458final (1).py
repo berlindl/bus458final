@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pickle
@@ -22,6 +21,7 @@ st.header("Enter Loan Applicant's Details")
 
 # --- Numerical Inputs (Raw values needed for log transformation) ---
 fico = st.slider("FICO Score", min_value=550, max_value=850, value=700, step=1)
+# Note: req_loan is used for the requested amount slider
 req_loan = st.slider("Requested Loan Amount ($)", min_value=5000.0, max_value=150000.0, value=30000.0, step=1000.0)
 mgi = st.slider("Monthly Gross Income ($)", min_value=1000.0, max_value=15000.0, value=5000.0, step=100.0)
 mhp = st.slider("Monthly Housing Payment ($)", min_value=500.0, max_value=4000.0, value=1200.0, step=50.0)
@@ -51,14 +51,15 @@ lender = st.selectbox("Lender Partner", ["A", "B", "C"])
 # --- Create the input data as a DataFrame (Base Data) ---
 input_data = pd.DataFrame({
     "applications": [applications],
-    "Requested_Loan_Amount": [req_loan],
+    "Requested_Loan_Amount": [req_loan], # Using req_loan slider variable
     "FICO_score": [fico],
     "Ever_Bankrupt_or_Foreclose": [bankrupt],
     
     # Raw variables needed for log transformation (MUST be included here)
+    # The 'Granted_Loan_Amount' in your training code was replaced by 'Requested_Loan_Amount'
     "Monthly_Gross_Income": [mgi],
     "Monthly_Housing_Payment": [mhp],
-    "Requested_Loan_Amount": [granted_loan],
+    "Requested_Loan_Amount_for_log": [req_loan], # Temp column for log transform
     
     # Categorical inputs
     "Reason": [reason],
@@ -67,21 +68,24 @@ input_data = pd.DataFrame({
     "Lender": [lender]
 })
 
+
 # --- Prepare Data for Prediction (EXACTLY MATCHING TRAINING PIPELINE) ---
 
 # 1. Apply Log Transformations using np.log1p (log(1+x))
+# Note: Renamed log-transformed variable to match your training code names
 input_data['ln_Monthly_Gross_Income'] = np.log1p(input_data['Monthly_Gross_Income'])
 input_data['ln_Monthly_Housing_Payment'] = np.log1p(input_data['Monthly_Housing_Payment'])
-input_data['lon_Requested_Loan_Amount'] = np.log1p(input_data['Requested_Loan_Amount'])
+input_data['lon_Granted_Loan_Amount'] = np.log1p(input_data['Requested_Loan_Amount_for_log'])
 
 
 # 2. Drop the raw and excluded columns (MUST MATCH YOUR X DEFINITION)
 columns_to_drop = [
-    'Monthly_Gross_Income', 
-    'Monthly_Housing_Payment', 
-    'Granted_Loan_Amount', 'Requested_Loan_Amount']
-    # 'Fico_Score_group' is not present, so no need to drop
-
+    'Monthly_Gross_Income',
+    'Monthly_Housing_Payment',
+    'Requested_Loan_Amount_for_log' # Drop the raw column used for log transform
+    # 'Granted_Loan_Amount' and 'Fico_Score_group' were dropped from the training DataFrame,
+    # but since they were not created in the app, we don't drop them here.
+]
 input_data = input_data.drop(columns=columns_to_drop)
 
 
