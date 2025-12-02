@@ -5,10 +5,16 @@ import pandas as pd
 import numpy as np
 import sklearn # This is needed for the pickle file to load!
 
-# --- 1. CONFIGURATION AND MODEL LOADING ---
+# --- 1. CONFIGURATION, STATE, AND MODEL LOADING ---
 
 # Set a wide page configuration for better aesthetics
 st.set_page_config(layout="wide")
+
+# Initialize session state variables
+if 'results_data' not in st.session_state:
+    st.session_state['results_data'] = None
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
 
 # Load the trained model
 try:
@@ -49,59 +55,18 @@ col1, col2 = st.columns(2)
 
 
 # --- 3. INPUT WIDGETS ---
-
-# --- Column 1: Core Financials ---
+# Variables initialized here will persist across reruns
 with col1:
     with st.container(border=True):
         st.subheader("💳 Credit & Income Metrics")
 
-        # FICO Score using number_input for a clean look
-        fico = st.number_input(
-            "FICO Score (450 - 850)",
-            min_value=450,
-            max_value=850,
-            value=700,
-            step=1,
-            help="The primary measure of credit risk."
-        )
-
-        # Requested Loan Amount slider (req_loan)
-        req_loan = st.slider(
-            "Requested Loan Amount ($)",
-            min_value=5000.0,
-            max_value=150000.0,
-            value=30000.0,
-            step=1000.0
-        )
-        
-        # Monthly Gross Income slider
-        mgi = st.slider(
-            "Monthly Gross Income ($)",
-            min_value=1000.0,
-            max_value=15000.0,
-            value=5000.0,
-            step=100.0
-        )
-        
-        # Monthly Housing Payment slider
-        mhp = st.slider(
-            "Monthly Housing Payment ($)",
-            min_value=500.0,
-            max_value=4000.0,
-            value=1200.0,
-            step=50.0
-        )
-        
-        # Binary input (Bankruptcy)
-        bankrupt = st.selectbox(
-            "Ever Bankrupt or Foreclosed",
-            [0, 1],
-            format_func=lambda x: 'Yes (1)' if x == 1 else 'No (0)'
-        )
+        fico = st.number_input("FICO Score (450 - 850)", min_value=450, max_value=850, value=700, step=1, help="The primary measure of credit risk.")
+        req_loan = st.slider("Requested Loan Amount ($)", min_value=5000.0, max_value=150000.0, value=30000.0, step=1000.0)
+        mgi = st.slider("Monthly Gross Income ($)", min_value=1000.0, max_value=15000.0, value=5000.0, step=100.0)
+        mhp = st.slider("Monthly Housing Payment ($)", min_value=500.0, max_value=4000.0, value=1200.0, step=50.0)
+        bankrupt = st.selectbox("Ever Bankrupt or Foreclosed", [0, 1], format_func=lambda x: 'Yes (1)' if x == 1 else 'No (0)')
         applications = 1
 
-
-# --- Column 2: Loan & Employment Details ---
 with col2:
     with st.container(border=True):
         st.subheader("💼 Loan & Employment Details")
@@ -118,17 +83,15 @@ with col2:
             "real_estate", "utilities", "consumer_discretionary", "communication_services",
             "consumer_staples", "materials", "energy"
         ])
-        
-        # Lender is handled dynamically in the prediction step
 
 
-# --- 4. DATA PREPARATION FUNCTIONS ---
+# --- 4. DATA PREPARATION FUNCTIONS (UNCHANGED) ---
 
 def preprocess_data(input_df, model_columns):
     """Applies log transforms, drops raw columns, and aligns dummies for prediction."""
     df = input_df.copy()
     
-    # 1. Apply Log Transformations (KEEPING ORIGINAL LOGIC)
+    # 1. Apply Log Transformations
     df['ln_Monthly_Gross_Income'] = np.log1p(df['Monthly_Gross_Income'])
     df['ln_Monthly_Housing_Payment'] = np.log1p(df['Monthly_Housing_Payment'])
     df['lon_Granted_Loan_Amount'] = np.log1p(df['Requested_Loan_Amount_for_log'])
@@ -151,17 +114,17 @@ def preprocess_data(input_df, model_columns):
     final_data = final_data.fillna(0)
     return final_data[model_columns]
 
-# --- 5. PREDICTION AND OUTPUT ---
 
-st.markdown("---")
-if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=True):
+# --- 5. PREDICTION LOGIC (MOVED TO A FUNCTION) ---
+
+def run_prediction():
+    """Calculates probabilities and expected payouts for all lenders and stores them in session state."""
     
     # Define Payouts (Business Secret)
     payouts = {"A": 250, "B": 350, "C": 150} 
     lenders = ["A", "B", "C"]
-    results = {}
     
-    # Base Dataframe Creation (used for all prediction scenarios)
+    # Base Dataframe Creation
     base_input_data = pd.DataFrame({
         "applications": [applications],
         "Requested_Loan_Amount": [req_loan],
@@ -173,7 +136,7 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
         "Reason": [reason],
         "Employment_Status": [employment_status],
         "Employment_Sector": [employment_sector],
-        "Lender": ["A"] 
+        "Lender": ["A"] # Placeholder
     })
     
     # Initialize trackers
@@ -182,7 +145,10 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
     optimal_revenue_lender = None
     most_likely_lender = None
     
-    # --- Predict for all three lenders and track best matches ---
+    # Store all results here
+    full_results = {}
+    
+    # Predict for all three lenders and track best matches
     for lender_name in lenders:
         current_data = base_input_data.copy()
         current_data["Lender"] = lender_name
@@ -191,8 +157,7 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
         prob = model.predict_proba(input_aligned)[0][1]
         expected_payout = prob * payouts[lender_name]
         
-        # Store results for comparison table
-        results[lender_name] = {'prob': prob, 'payout': payouts[lender_name], 'expected_payout': expected_payout}
+        full_results[lender_name] = {'prob': prob, 'payout': payouts[lender_name], 'expected_payout': expected_payout}
         
         # Track Max Probability (for customer insight)
         if prob > max_prob:
@@ -203,13 +168,41 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
         if expected_payout > max_expected_payout:
             max_expected_payout = expected_payout
             optimal_revenue_lender = lender_name
-
-
-    # --- 6. DISPLAY RESULTS ---
+            
+    # Save the necessary data to session state
+    st.session_state.results_data = {
+        'full_results': full_results,
+        'max_prob': max_prob,
+        'most_likely_lender': most_likely_lender,
+        'max_expected_payout': max_expected_payout,
+        'optimal_revenue_lender': optimal_revenue_lender
+    }
     
+    st.success("Prediction complete! Results are shown below.")
+
+
+# --- 6. BUTTON AND RESULT DISPLAY ---
+
+st.markdown("---")
+# Call the prediction function when the button is clicked
+st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=True, on_click=run_prediction)
+
+# Only show results if they exist in session state
+if st.session_state.results_data:
+    
+    data = st.session_state.results_data
+    full_results = data['full_results']
+    max_prob = data['max_prob']
+    most_likely_lender = data['most_likely_lender']
+    max_expected_payout = data['max_expected_payout']
+    optimal_revenue_lender = data['optimal_revenue_lender']
+    lenders = list(full_results.keys())
+    payouts = {l: full_results[l]['payout'] for l in lenders}
+
+
+    # --- Prediction Summary ---
     st.subheader("🎯 Prediction Summary")
     
-    # Use max_prob and most_likely_lender for the customer summary
     if max_prob >= 0.5:
         st.success(f"🎉 **APPROVED!** The customer is best matched with **Lender {most_likely_lender}**, yielding a maximum approval likelihood of **{max_prob:.2%}**.")
     else:
@@ -217,7 +210,7 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
 
     st.markdown("---")
     
-    # --- Lender Comparison Output (Highlights highest chance of approval) ---
+    # --- Lender Comparison Output ---
     st.subheader("📊 Lender Approval Likelihood Comparison")
     st.markdown("This comparison shows the customer's chance of approval with each potential partner.")
 
@@ -225,8 +218,7 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
     cols = [col_a, col_b, col_c]
     
     for i, lender_name in enumerate(lenders):
-        prob = results[lender_name]['prob']
-        is_approved = prob >= 0.5
+        prob = full_results[lender_name]['prob']
         
         label_text = f"Lender {lender_name} (Payout: ${payouts[lender_name]})"
         
@@ -234,7 +226,7 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
             st.metric(
                 label=label_text, 
                 value=f"{prob:.1%}",
-                # CHANGE: Highlight based on max probability (most_likely_lender)
+                # Highlight based on max probability
                 delta="Highest Approval Chance" if lender_name == most_likely_lender else None,
                 delta_color="normal" if lender_name == most_likely_lender else "off"
             )
@@ -242,12 +234,20 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
     st.markdown("---")
     
     # --- NEW: Password Protection for Business Payout Analysis ---
-    st.subheader("🔒 Business Payout Analysis")
+    st.subheader("🔒 Business Payout Analysis (Password Protected)")
     
-    password = st.text_input("Enter password to view Business Insights", type="password")
+    # Define a password check function
+    def check_password_and_set_state():
+        if st.session_state.password_input == "wayne":
+            st.session_state.logged_in = True
+        else:
+            st.session_state.logged_in = False
+            
+    # Use key for text_input to link it to session state
+    st.text_input("Enter password to view Business Insights", type="password", key="password_input", on_change=check_password_and_set_state)
 
-    if password == "wayne":
-        st.success("Access Granted!")
+    if st.session_state.logged_in:
+        st.success("Access Granted! Displaying business insights.")
         
         st.markdown("This section calculates the expected revenue for the platform by routing the customer to the optimal lending partner.")
         
@@ -274,5 +274,5 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
                 delta_color="off",
                 help="The predicted revenue for the platform: Max Approval Probability * Payout."
             )
-    elif password: # If password is not empty but incorrect
+    elif st.session_state.password_input:
         st.error("Access Denied: Incorrect password.")
