@@ -5,58 +5,135 @@ import pandas as pd
 import numpy as np
 import sklearn # This is needed for the pickle file to load!
 
+# --- 1. CONFIGURATION AND MODEL LOADING ---
+
+# Set a wide page configuration for better aesthetics
+st.set_page_config(layout="wide")
+
 # Load the trained model
 # IMPORTANT: Update this path and file name if you saved it differently
-with open("458finalcomp.pkl", "rb") as file:
-    model = pickle.load(file)
+try:
+    with open("458finalcomp.pkl", "rb") as file:
+        model = pickle.load(file)
+except FileNotFoundError:
+    st.error("Error: Model file '458finalcomp.pkl' not found. Please ensure it's in the correct directory.")
+    st.stop()
+except Exception as e:
+    st.error(f"Error loading model: {e}")
+    st.stop()
 
-# Title for the app
+
+# --- 2. TITLE AND HEADER (The 'Cool' Part) ---
+
+# Custom Title for "Lou & Petes Loan Approval Predicta"
 st.markdown(
-    "<h1 style='text-align: center; background-color: #008080; padding: 10px; color: #ffffff;'><b>Loan Approval Likelihood Predictor</b></h1>",
+    """
+    <div style='background-color: #2F4F4F; padding: 15px; border-radius: 10px; text-align: center;'>
+        <h1 style='color: #FFD700; margin: 0;'>
+            💰 Lou & Pete's Loan Approval Predicta 💰
+        </h1>
+        <p style='color: #f0f0f0; margin: 5px 0 0;'>
+            Powered by Data Analytics
+        </p>
+    </div>
+    """,
     unsafe_allow_html=True
 )
 
-# Numeric and Categorical inputs
-st.header("Enter Loan Applicant's Details")
+st.write("") # Add a little space
 
-# --- Numerical Inputs (Raw values needed for log transformation) ---
-fico = st.slider("FICO Score", min_value=450, max_value=850, value=700, step=1)
-# Note: req_loan is used for the requested amount slider
-req_loan = st.slider("Requested Loan Amount ($)", min_value=5000.0, max_value=150000.0, value=30000.0, step=1000.0)
-mgi = st.slider("Monthly Gross Income ($)", min_value=1000.0, max_value=15000.0, value=5000.0, step=100.0)
-mhp = st.slider("Monthly Housing Payment ($)", min_value=500.0, max_value=4000.0, value=1200.0, step=50.0)
-# 'applications' was a column in your data, assuming 1 for a single request
-applications = 1
+st.subheader("Applicant Profile Builder")
 
-# --- Binary and Categorical Inputs ---
-bankrupt = st.selectbox("Ever Bankrupt or Foreclosed", [0, 1], format_func=lambda x: 'Yes (1)' if x == 1 else 'No (0)')
+# Use columns for a cool, two-column layout
+col1, col2 = st.columns(2)
 
-reason = st.selectbox("Reason for Loan", [
-    "credit_card_refinancing", "debt_conslidation", "home_improvement",
-    "major_purchase", "cover_an_unexpected_cost", "other"
-])
 
-# NOTE: Using a simplified list for the app's sector dropdown, including 'Missing'
-employment_status = st.selectbox("Employment Status", ["full_time", "part_time", "unemployed"])
+# --- 3. INPUT WIDGETS (Grouped for uniqueness) ---
 
-employment_sector = st.selectbox("Employment Sector", [
-    "Missing", "financials", "health_care", "information_technology", "industrials",
-    "real_estate", "utilities", "consumer_discretionary", "communication_services",
-    "consumer_staples", "materials", "energy"
-])
+# --- Column 1: Core Financials ---
+with col1:
+    with st.container(border=True):
+        st.subheader("Credit & Income Metrics")
 
-lender = st.selectbox("Lender Partner", ["A", "B", "C"])
+        # FICO Score using number_input for a clean look, often better for specific numbers
+        fico = st.number_input(
+            "FICO Score (550 - 850)", 
+            min_value=450, 
+            max_value=850, 
+            value=700, 
+            step=1,
+            help="The primary measure of credit risk."
+        )
 
+        # Monthly Gross Income slider
+        mgi = st.slider(
+            "Monthly Gross Income ($)", 
+            min_value=1000.0, 
+            max_value=15000.0, 
+            value=5000.0, 
+            step=100.0
+        )
+
+        # Monthly Housing Payment slider
+        mhp = st.slider(
+            "Monthly Housing Payment ($)", 
+            min_value=500.0, 
+            max_value=4000.0, 
+            value=1200.0, 
+            step=50.0
+        )
+        
+        # Binary input (Bankruptcy)
+        bankrupt = st.selectbox(
+            "Ever Bankrupt or Foreclosed", 
+            [0, 1], 
+            format_func=lambda x: 'Yes (1)' if x == 1 else 'No (0)'
+        )
+        # 'applications' was a column in your data, assuming 1 for a single request
+        applications = 1
+
+
+# --- Column 2: Loan & Employment Details ---
+with col2:
+    with st.container(border=True):
+        st.subheader("Loan & Employment Details")
+
+        # Requested Loan Amount slider (req_loan)
+        req_loan = st.slider(
+            "Requested Loan Amount ($)", 
+            min_value=5000.0, 
+            max_value=150000.0, 
+            value=30000.0, 
+            step=1000.0
+        )
+        
+        # Categorical Selectboxes
+        reason = st.selectbox("Reason for Loan", [
+            "credit_card_refinancing", "debt_conslidation", "home_improvement",
+            "major_purchase", "cover_an_unexpected_cost", "other"
+        ])
+
+        employment_status = st.selectbox("Employment Status", ["full_time", "part_time", "unemployed"])
+
+        employment_sector = st.selectbox("Employment Sector", [
+            "Missing", "financials", "health_care", "information_technology", "industrials",
+            "real_estate", "utilities", "consumer_discretionary", "communication_services",
+            "consumer_staples", "materials", "energy"
+        ])
+
+        lender = st.selectbox("Lender Partner", ["A", "B", "C"])
+
+
+# --- 4. DATA PREPARATION (LOGIC MUST BE UNCHANGED) ---
 
 # --- Create the input data as a DataFrame (Base Data) ---
 input_data = pd.DataFrame({
     "applications": [applications],
-    "Requested_Loan_Amount": [req_loan], # Using req_loan slider variable
+    "Requested_Loan_Amount": [req_loan],
     "FICO_score": [fico],
     "Ever_Bankrupt_or_Foreclose": [bankrupt],
     
-    # Raw variables needed for log transformation (MUST be included here)
-    # The 'Granted_Loan_Amount' in your training code was replaced by 'Requested_Loan_Amount'
+    # Raw variables needed for log transformation
     "Monthly_Gross_Income": [mgi],
     "Monthly_Housing_Payment": [mhp],
     "Requested_Loan_Amount_for_log": [req_loan], # Temp column for log transform
@@ -68,11 +145,7 @@ input_data = pd.DataFrame({
     "Lender": [lender]
 })
 
-
-# --- Prepare Data for Prediction (EXACTLY MATCHING TRAINING PIPELINE) ---
-
 # 1. Apply Log Transformations using np.log1p (log(1+x))
-# Note: Renamed log-transformed variable to match your training code names
 input_data['ln_Monthly_Gross_Income'] = np.log1p(input_data['Monthly_Gross_Income'])
 input_data['ln_Monthly_Housing_Payment'] = np.log1p(input_data['Monthly_Housing_Payment'])
 input_data['lon_Granted_Loan_Amount'] = np.log1p(input_data['Requested_Loan_Amount_for_log'])
@@ -82,9 +155,7 @@ input_data['lon_Granted_Loan_Amount'] = np.log1p(input_data['Requested_Loan_Amou
 columns_to_drop = [
     'Monthly_Gross_Income',
     'Monthly_Housing_Payment',
-    'Requested_Loan_Amount_for_log' # Drop the raw column used for log transform
-    # 'Granted_Loan_Amount' and 'Fico_Score_group' were dropped from the training DataFrame,
-    # but since they were not created in the app, we don't drop them here.
+    'Requested_Loan_Amount_for_log'
 ]
 input_data = input_data.drop(columns=columns_to_drop)
 
@@ -102,18 +173,20 @@ final_data = final_data.fillna(0) # Fill NaN from missing dummy columns with 0
 input_data_aligned = final_data[model_columns]
 
 
-# Predict button
-if st.button("Predict Approval"):
+# --- 5. PREDICTION AND OUTPUT ---
+
+st.markdown("---")
+# Predict button placed in the center
+if st.button("Predict Loan Approval Likelihood", type="primary", use_container_width=True):
     # Predict using the loaded model
-    # Model returns 1 (Approved) or 0 (Denied)
     prediction = model.predict(input_data_aligned)[0]
 
-    st.markdown("---")
     st.subheader("Prediction Result:")
 
     if prediction == 1:
-        st.success(f"✅ Prediction: Approved (1)")
-        st.write("The model predicts this application is likely to be **APPROVED**.")
+        st.success(f"🎉 Prediction: APPROVED (1)")
+        st.balloons() # Add some celebration!
+        st.markdown("**This application is highly likely to be APPROVED.** The customer's profile meets the minimum lending criteria.")
     else:
-        st.error(f"❌ Prediction: Denied (0)")
-        st.write("The model predicts this application is likely to be **DENIED**.")
+        st.error(f"⚠️ Prediction: DENIED (0)")
+        st.markdown("**This application is likely to be DENIED.** The customer's profile suggests a higher risk.")
