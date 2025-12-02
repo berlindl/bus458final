@@ -23,7 +23,7 @@ except Exception as e:
     st.stop()
 
 
-# --- 2. TITLE AND HEADER (The 'Cool' Part) ---
+# --- 2. TITLE AND HEADER ---
 
 # Custom Title for "Lou & Petes Loan Approval Predicta"
 st.markdown(
@@ -122,13 +122,13 @@ with col2:
         # Lender is handled dynamically in the prediction step
 
 
-# --- 4. DATA PREPARATION FUNCTIONS (Needed for Reusability) ---
+# --- 4. DATA PREPARATION FUNCTIONS ---
 
 def preprocess_data(input_df, model_columns):
     """Applies log transforms, drops raw columns, and aligns dummies for prediction."""
     df = input_df.copy()
     
-    # 1. Apply Log Transformations
+    # 1. Apply Log Transformations (KEEPING ORIGINAL LOGIC)
     df['ln_Monthly_Gross_Income'] = np.log1p(df['Monthly_Gross_Income'])
     df['ln_Monthly_Housing_Payment'] = np.log1p(df['Monthly_Housing_Payment'])
     df['lon_Granted_Loan_Amount'] = np.log1p(df['Requested_Loan_Amount_for_log'])
@@ -173,54 +173,53 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
         "Reason": [reason],
         "Employment_Status": [employment_status],
         "Employment_Sector": [employment_sector],
-        # The 'Lender' column will be added/swapped in the loop below
         "Lender": ["A"] 
     })
     
-    # --- Predict for all three lenders and find expected value ---
-    
-    # We want to find the lender that yields the maximum Expected Payout (Prob * Payout)
+    # Initialize trackers
     max_expected_payout = -1
-    best_lender = None
-    best_prob = 0
+    max_prob = -1
+    optimal_revenue_lender = None
+    most_likely_lender = None
     
+    # --- Predict for all three lenders and track best matches ---
     for lender_name in lenders:
-        # Clone base data and set the current lender
         current_data = base_input_data.copy()
         current_data["Lender"] = lender_name
         
-        # Preprocess and align
         input_aligned = preprocess_data(current_data, model.feature_names_in_)
-        
-        # Predict probability for class 1 (Approved)
         prob = model.predict_proba(input_aligned)[0][1]
-        results[lender_name] = prob # Store probability for display
-        
-        # Calculate Expected Payout for this lender
         expected_payout = prob * payouts[lender_name]
         
-        # Update best match if this lender is better
+        # Store results for comparison table
+        results[lender_name] = {'prob': prob, 'payout': payouts[lender_name], 'expected_payout': expected_payout}
+        
+        # Track Max Probability (for customer insight)
+        if prob > max_prob:
+            max_prob = prob
+            most_likely_lender = lender_name
+            
+        # Track Max Expected Payout (for business insight)
         if expected_payout > max_expected_payout:
             max_expected_payout = expected_payout
-            best_lender = lender_name
-            best_prob = prob # Store the best probability (which yields max expected payout)
-            
-        results[lender_name] = {'prob': prob, 'payout': payouts[lender_name], 'expected_payout': expected_payout}
+            optimal_revenue_lender = lender_name
+
 
     # --- 6. DISPLAY RESULTS ---
     
     st.subheader("🎯 Prediction Summary")
     
-    # Determine the binary outcome for the highest probability
-    if best_prob >= 0.5:
-        st.success(f"🎉 **APPROVED!** The customer is best matched with **Lender {best_lender}**, yielding a maximum approval likelihood of **{best_prob:.2%}**.")
+    # Use max_prob and most_likely_lender for the customer summary
+    if max_prob >= 0.5:
+        st.success(f"🎉 **APPROVED!** The customer is best matched with **Lender {most_likely_lender}**, yielding a maximum approval likelihood of **{max_prob:.2%}**.")
     else:
-        st.warning(f"⚠️ **DENIED.** Even with the optimal match (Lender {best_lender}), the maximum approval likelihood is **{best_prob:.2%}**.")
+        st.warning(f"⚠️ **DENIED.** Even with the optimal match (Lender {most_likely_lender}), the maximum approval likelihood is **{max_prob:.2%}**.")
 
     st.markdown("---")
     
-    # --- Lender Comparison Output ---
+    # --- Lender Comparison Output (Highlights highest chance of approval) ---
     st.subheader("📊 Lender Approval Likelihood Comparison")
+    st.markdown("This comparison shows the customer's chance of approval with each potential partner.")
 
     col_a, col_b, col_c = st.columns(3)
     cols = [col_a, col_b, col_c]
@@ -235,36 +234,45 @@ if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=
             st.metric(
                 label=label_text, 
                 value=f"{prob:.1%}",
-                delta="Optimal Revenue Match" if lender_name == best_lender else None,
-                delta_color="normal" if lender_name == best_lender else "off"
+                # CHANGE: Highlight based on max probability (most_likely_lender)
+                delta="Highest Approval Chance" if lender_name == most_likely_lender else None,
+                delta_color="normal" if lender_name == most_likely_lender else "off"
             )
 
     st.markdown("---")
     
-    # --- NEW: Business Payout Analysis ---
-    st.subheader("💰 Business Payout Analysis (Intermediary Platform)")
-    st.markdown("This section calculates the expected revenue for the platform by routing the customer to the optimal lending partner.")
+    # --- NEW: Password Protection for Business Payout Analysis ---
+    st.subheader("🔒 Business Payout Analysis")
     
-    business_col1, business_col2, business_col3 = st.columns(3)
-    
-    with business_col1:
-        st.metric(
-            label="Optimal Lender",
-            value=f"Lender {best_lender}",
-            help="The lender that offers the highest Expected Payout (Probability * Payout)."
-        )
+    password = st.text_input("Enter password to view Business Insights", type="password")
 
-    with business_col2:
-        st.metric(
-            label="Lender Payout (if Approved)",
-            value=f"${payouts[best_lender]}",
-            help="The cash reward the platform receives if Lender {best_lender} approves the loan."
-        )
+    if password == "wayne":
+        st.success("Access Granted!")
         
-    with business_col3:
-        st.metric(
-            label="MAX Expected Payout (Revenue)",
-            value=f"${max_expected_payout:.2f}",
-            delta_color="off",
-            help="The predicted revenue for the platform: Max Approval Probability * Payout."
-        )
+        st.markdown("This section calculates the expected revenue for the platform by routing the customer to the optimal lending partner.")
+        
+        business_col1, business_col2, business_col3 = st.columns(3)
+        
+        with business_col1:
+            st.metric(
+                label="Optimal Revenue Lender",
+                value=f"Lender {optimal_revenue_lender}",
+                help="The lender that offers the highest Expected Payout (Probability * Payout)."
+            )
+
+        with business_col2:
+            st.metric(
+                label="Lender Payout (if Approved)",
+                value=f"${payouts[optimal_revenue_lender]}",
+                help=f"The cash reward the platform receives if Lender {optimal_revenue_lender} approves the loan."
+            )
+            
+        with business_col3:
+            st.metric(
+                label="MAX Expected Payout (Revenue)",
+                value=f"${max_expected_payout:.2f}",
+                delta_color="off",
+                help="The predicted revenue for the platform: Max Approval Probability * Payout."
+            )
+    elif password: # If password is not empty but incorrect
+        st.error("Access Denied: Incorrect password.")
