@@ -244,7 +244,7 @@ if st.session_state.results_data:
             st.session_state.logged_in = False
             
     # Use key for text_input to link it to session state
-    st.text_input("Enter password to view Business Insights (password="wayne"), type="password", key="password_input", on_change=check_password_and_set_state)
+    st.text_input("Enter password to view Business Insights", type="password", key="password_input", on_change=check_password_and_set_state)
 
     if st.session_state.logged_in:
         st.success("Access Granted! Displaying business insights.")
