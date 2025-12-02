@@ -20,7 +20,7 @@ st.markdown(
 st.header("Enter Loan Applicant's Details")
 
 # --- Numerical Inputs (Raw values needed for log transformation) ---
-fico = st.slider("FICO Score", min_value=550, max_value=850, value=700, step=1)
+fico = st.slider("FICO Score", min_value=450, max_value=850, value=700, step=1)
 # Note: req_loan is used for the requested amount slider
 req_loan = st.slider("Requested Loan Amount ($)", min_value=5000.0, max_value=150000.0, value=30000.0, step=1000.0)
 mgi = st.slider("Monthly Gross Income ($)", min_value=1000.0, max_value=15000.0, value=5000.0, step=100.0)
