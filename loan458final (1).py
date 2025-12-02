@@ -81,7 +81,7 @@ columns_to_drop = [
     'Monthly_Housing_Payment', 
     'Granted_Loan_Amount', 'Requested_Loan_Amount']
     # 'Fico_Score_group' is not present, so no need to drop
-]
+
 input_data = input_data.drop(columns=columns_to_drop)
 
 
