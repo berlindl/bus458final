@@ -58,7 +58,7 @@ input_data = pd.DataFrame({
     # Raw variables needed for log transformation (MUST be included here)
     "Monthly_Gross_Income": [mgi],
     "Monthly_Housing_Payment": [mhp],
-    "Granted_Loan_Amount": [granted_loan],
+    "Requested_Loan_Amount": [granted_loan],
     
     # Categorical inputs
     "Reason": [reason],
