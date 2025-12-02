@@ -234,7 +234,7 @@ if st.session_state.results_data:
     st.markdown("---")
     
     # --- NEW: Password Protection for Business Payout Analysis ---
-    st.subheader("🔒 Business Payout Analysis (Password Protected)")
+    st.subheader("🔒 Business Payout Analysis (Password="wayne")")
     
     # Define a password check function
     def check_password_and_set_state():
