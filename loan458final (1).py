@@ -10,16 +10,9 @@ import sklearn # This is needed for the pickle file to load!
 # Set a wide page configuration for better aesthetics
 st.set_page_config(layout="wide")
 
-# Define Payouts from the business case (securely, usually via st.secrets)
-# Hardcoding for simplicity in this example
-PAYOUTS = {
-    "A": 250,
-    "B": 350,
-    "C": 150
-}
-
 # Load the trained model
 try:
+    # Use the relative path you corrected
     with open("458finalcomp.pkl", "rb") as file:
         model = pickle.load(file)
 except FileNotFoundError:
@@ -62,6 +55,7 @@ with col1:
     with st.container(border=True):
         st.subheader("💳 Credit & Income Metrics")
 
+        # FICO Score using number_input for a clean look
         fico = st.number_input(
             "FICO Score (450 - 850)",
             min_value=450,
@@ -71,6 +65,7 @@ with col1:
             help="The primary measure of credit risk."
         )
 
+        # Requested Loan Amount slider (req_loan)
         req_loan = st.slider(
             "Requested Loan Amount ($)",
             min_value=5000.0,
@@ -79,6 +74,7 @@ with col1:
             step=1000.0
         )
         
+        # Monthly Gross Income slider
         mgi = st.slider(
             "Monthly Gross Income ($)",
             min_value=1000.0,
@@ -87,6 +83,7 @@ with col1:
             step=100.0
         )
         
+        # Monthly Housing Payment slider
         mhp = st.slider(
             "Monthly Housing Payment ($)",
             min_value=500.0,
@@ -95,6 +92,7 @@ with col1:
             step=50.0
         )
         
+        # Binary input (Bankruptcy)
         bankrupt = st.selectbox(
             "Ever Bankrupt or Foreclosed",
             [0, 1],
@@ -120,7 +118,8 @@ with col2:
             "real_estate", "utilities", "consumer_discretionary", "communication_services",
             "consumer_staples", "materials", "energy"
         ])
-        # Note: Lender is handled in the prediction loop
+        
+        # Lender is handled dynamically in the prediction step
 
 
 # --- 4. DATA PREPARATION FUNCTIONS (Needed for Reusability) ---
@@ -155,7 +154,12 @@ def preprocess_data(input_df, model_columns):
 # --- 5. PREDICTION AND OUTPUT ---
 
 st.markdown("---")
-if st.button("PREDICT APPROVAL LIKELIHOOD & CALCULATE PAYOUT", type="primary", use_container_width=True):
+if st.button("PREDICT APPROVAL LIKELIHOOD", type="primary", use_container_width=True):
+    
+    # Define Payouts (Business Secret)
+    payouts = {"A": 250, "B": 350, "C": 150} 
+    lenders = ["A", "B", "C"]
+    results = {}
     
     # Base Dataframe Creation (used for all prediction scenarios)
     base_input_data = pd.DataFrame({
@@ -169,13 +173,17 @@ if st.button("PREDICT APPROVAL LIKELIHOOD & CALCULATE PAYOUT", type="primary", u
         "Reason": [reason],
         "Employment_Status": [employment_status],
         "Employment_Sector": [employment_sector],
-        "Lender": ["A"] # Placeholder, will be replaced in loop
+        # The 'Lender' column will be added/swapped in the loop below
+        "Lender": ["A"] 
     })
     
-    lenders = ["A", "B", "C"]
-    results = {}
+    # --- Predict for all three lenders and find expected value ---
     
-    # --- Predict for all three lenders and calculate Expected Payout ---
+    # We want to find the lender that yields the maximum Expected Payout (Prob * Payout)
+    max_expected_payout = -1
+    best_lender = None
+    best_prob = 0
+    
     for lender_name in lenders:
         # Clone base data and set the current lender
         current_data = base_input_data.copy()
@@ -186,68 +194,77 @@ if st.button("PREDICT APPROVAL LIKELIHOOD & CALCULATE PAYOUT", type="primary", u
         
         # Predict probability for class 1 (Approved)
         prob = model.predict_proba(input_aligned)[0][1]
-        payout = PAYOUTS[lender_name]
-        expected_payout = prob * payout
+        results[lender_name] = prob # Store probability for display
         
-        results[lender_name] = {
-            "probability": prob,
-            "payout": payout,
-            "expected_payout": expected_payout,
-            "is_approved": prob >= 0.5
-        }
+        # Calculate Expected Payout for this lender
+        expected_payout = prob * payouts[lender_name]
+        
+        # Update best match if this lender is better
+        if expected_payout > max_expected_payout:
+            max_expected_payout = expected_payout
+            best_lender = lender_name
+            best_prob = prob # Store the best probability (which yields max expected payout)
+            
+        results[lender_name] = {'prob': prob, 'payout': payouts[lender_name], 'expected_payout': expected_payout}
 
-    # --- Find Optimal Lender (Highest Expected Payout) ---
-    best_lender = max(results, key=lambda l: results[l]['expected_payout'])
-    
     # --- 6. DISPLAY RESULTS ---
     
     st.subheader("🎯 Prediction Summary")
     
-    # Display the binary outcome based on the HIGHEST probability achieved
-    max_prob = results[best_lender]['probability']
-    
-    if max_prob >= 0.5:
-        st.success(f"🎉 **APPROVED!** The application has a maximum approval likelihood of **{max_prob:.2%}** (with Lender {best_lender}).")
+    # Determine the binary outcome for the highest probability
+    if best_prob >= 0.5:
+        st.success(f"🎉 **APPROVED!** The customer is best matched with **Lender {best_lender}**, yielding a maximum approval likelihood of **{best_prob:.2%}**.")
     else:
-        st.warning(f"⚠️ **DENIED.** The application's maximum approval likelihood is only **{max_prob:.2%}** (with Lender {best_lender}).")
+        st.warning(f"⚠️ **DENIED.** Even with the optimal match (Lender {best_lender}), the maximum approval likelihood is **{best_prob:.2%}**.")
 
     st.markdown("---")
     
-    # --- Lender Comparison Output (Business Focus) ---
-    st.subheader("📈 Lender Approval Likelihood & Business Payout Comparison")
-    st.markdown("**Business Goal:** Match the customer with the lender that provides the **highest Expected Payout**.")
+    # --- Lender Comparison Output ---
+    st.subheader("📊 Lender Approval Likelihood Comparison")
 
-    # Display the comparison in appealing metric format
     col_a, col_b, col_c = st.columns(3)
     cols = [col_a, col_b, col_c]
     
-    summary_df = pd.DataFrame(
-        [
-            (l, results[l]['probability'], results[l]['payout'], results[l]['expected_payout'])
-            for l in lenders
-        ],
-        columns=["Lender", "P(Approved)", "Payout", "Expected Payout"]
-    )
-    
-    # Use metrics to highlight the results
     for i, lender_name in enumerate(lenders):
-        prob = results[lender_name]['probability']
-        payout = results[lender_name]['payout']
-        expected_payout = results[lender_name]['expected_payout']
+        prob = results[lender_name]['prob']
+        is_approved = prob >= 0.5
         
-        is_optimal = lender_name == best_lender
+        label_text = f"Lender {lender_name} (Payout: ${payouts[lender_name]})"
         
         with cols[i]:
             st.metric(
-                label=f"Lender {lender_name}", 
-                value=f"${expected_payout:,.2f}",
-                delta=f"P(Approve): {prob:.1%}" if is_optimal else None,
-                delta_color="normal" if is_optimal else "off"
+                label=label_text, 
+                value=f"{prob:.1%}",
+                delta="Optimal Revenue Match" if lender_name == best_lender else None,
+                delta_color="normal" if lender_name == best_lender else "off"
             )
-            # Add a subtext below the metric
-            cols[i].caption(f"Payout: ${payout} | {'Approved' if prob >= 0.5 else 'Denied'}")
-            
-    st.markdown(f"""
-        ### Optimal Recommendation:
-        Based on the current profile, the model recommends matching the customer with **Lender {best_lender}** to maximize the expected revenue at **\${results[best_lender]['expected_payout']:,.2f}**.
-    """)
+
+    st.markdown("---")
+    
+    # --- NEW: Business Payout Analysis ---
+    st.subheader("💰 Business Payout Analysis (Intermediary Platform)")
+    st.markdown("This section calculates the expected revenue for the platform by routing the customer to the optimal lending partner.")
+    
+    business_col1, business_col2, business_col3 = st.columns(3)
+    
+    with business_col1:
+        st.metric(
+            label="Optimal Lender",
+            value=f"Lender {best_lender}",
+            help="The lender that offers the highest Expected Payout (Probability * Payout)."
+        )
+
+    with business_col2:
+        st.metric(
+            label="Lender Payout (if Approved)",
+            value=f"${payouts[best_lender]}",
+            help="The cash reward the platform receives if Lender {best_lender} approves the loan."
+        )
+        
+    with business_col3:
+        st.metric(
+            label="MAX Expected Payout (Revenue)",
+            value=f"${max_expected_payout:.2f}",
+            delta_color="off",
+            help="The predicted revenue for the platform: Max Approval Probability * Payout."
+        )
